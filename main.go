@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"sort"
 	"strconv"
 
 	"github.com/gocarina/gocsv"
@@ -15,6 +14,14 @@ type Transaction struct {
 	ID              string  `csv:"id"`
 	Amount          float64 `csv:"amount"`
 	BankCountryCode string  `csv:"bank_country_code"`
+}
+
+type WeightedTransaction struct {
+	ID              string
+	Amount          float64
+	BankCountryCode string
+	WeightedAmount  float64
+	WeightedLatency float64
 }
 
 type Latencies map[string]int
@@ -36,6 +43,12 @@ var latenciescsv []byte
 // tag each transaction with a ratio of amount to transaction latency
 // sort by transaction amount to latency ratio
 
+// best approach
+// dynamic programming 2d array
+// store the solutions of solved subproblems in 2d array
+// compare (maxValueIn2dArray + curr) against maxValueIn2dArray
+// max value is the last element in the matrix e.g values[len(transactions)][totalTime]
+
 func prioritizeTransactions(transactions []Transaction, totalTime int) []Transaction {
 	var latencies Latencies
 	err := json.Unmarshal(latenciescsv, &latencies)
@@ -43,27 +56,64 @@ func prioritizeTransactions(transactions []Transaction, totalTime int) []Transac
 		log.Println(err)
 		return nil
 	}
-	sort.SliceStable(transactions, func(i, j int) bool {
-		currRatio := transactions[i].Amount / float64(latencies[transactions[i].BankCountryCode])
-		nextRatio := transactions[j].Amount / float64(latencies[transactions[j].BankCountryCode])
-		return currRatio > nextRatio
-	})
-	var results []Transaction
-	var index int
-	var count float64
-	var time int
-	for time < totalTime {
-		time += latencies[transactions[index].BankCountryCode]
-		if time > totalTime {
-			break
-		}
-		results = append(results, transactions[index])
-		count += transactions[index].Amount
-		index += 1
+
+	values := make([][]float64, len(transactions)+1)
+	for i := range values {
+		values[i] = make([]float64, totalTime+1)
 	}
 
-	log.Printf("The max USD value that can be processed in %vms is $%v", totalTime, count)
+	keep := make([][]int, len(transactions)+1)
+	for i := range keep {
+		keep[i] = make([]int, totalTime+1)
+	}
 
+	var results []Transaction
+
+	for i := int64(0); i < int64(totalTime)+1; i++ {
+		values[0][i] = 0
+		keep[0][i] = 0
+	}
+
+	for i := 0; i < len(transactions)+1; i++ {
+		values[i][0] = 0
+		keep[i][0] = 0
+	}
+
+	for i := 1; i <= len(transactions); i++ {
+		for j := int(1); j <= int(totalTime); j++ {
+			maxValWithoutCurr := values[i-1][j]
+			maxValWithCurr := float64(0)
+
+			weightOfCurr := latencies[transactions[i-1].BankCountryCode]
+
+			if j >= weightOfCurr {
+				maxValWithCurr = transactions[i-1].Amount
+				remainingCapacity := j - weightOfCurr
+				maxValWithCurr += values[i-1][remainingCapacity]
+			}
+
+			if maxValWithCurr > maxValWithoutCurr {
+				values[i][j] = maxValWithCurr
+				keep[i][j] = 1
+			} else {
+				values[i][j] = maxValWithoutCurr
+				keep[i][j] = 0
+			}
+		}
+	}
+
+	log.Printf("The max USD value that can be processed in %vms is $%v", totalTime, values[len(transactions)][totalTime])
+
+	n := len(transactions)
+	c := totalTime
+
+	for n > 0 {
+		if keep[n][c] == 1 {
+			results = append(results, transactions[n-1])
+			c -= latencies[transactions[n-1].BankCountryCode]
+		}
+		n--
+	}
 	return results
 }
 
