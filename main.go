@@ -16,20 +16,7 @@ type Transaction struct {
 	BankCountryCode string  `csv:"bank_country_code"`
 }
 
-type WeightedTransaction struct {
-	ID              string
-	Amount          float64
-	BankCountryCode string
-	WeightedAmount  float64
-	WeightedLatency float64
-}
-
 type Latencies map[string]int
-
-type Result struct {
-	ID         string
-	Fraudulent bool
-}
 
 //go:embed latencies.json
 var latenciescsv []byte
