@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"log"
+	"math"
 	"os"
 	"strconv"
 
@@ -36,6 +37,10 @@ var latenciescsv []byte
 // compare (maxValueIn2dArray + curr) against maxValueIn2dArray
 // max value is the last element in the matrix e.g values[len(transactions)][totalTime]
 
+// time complexity
+// O (N*L)
+// where N is the number of transactions and L is the latency
+
 func prioritizeTransactions(transactions []Transaction, totalTime int) []Transaction {
 	var latencies Latencies
 	err := json.Unmarshal(latenciescsv, &latencies)
@@ -49,22 +54,7 @@ func prioritizeTransactions(transactions []Transaction, totalTime int) []Transac
 		values[i] = make([]float64, totalTime+1)
 	}
 
-	keep := make([][]int, len(transactions)+1)
-	for i := range keep {
-		keep[i] = make([]int, totalTime+1)
-	}
-
 	var results []Transaction
-
-	for i := int64(0); i < int64(totalTime)+1; i++ {
-		values[0][i] = 0
-		keep[0][i] = 0
-	}
-
-	for i := 0; i < len(transactions)+1; i++ {
-		values[i][0] = 0
-		keep[i][0] = 0
-	}
 
 	for i := 1; i <= len(transactions); i++ {
 		for j := int(1); j <= int(totalTime); j++ {
@@ -79,13 +69,7 @@ func prioritizeTransactions(transactions []Transaction, totalTime int) []Transac
 				maxValWithCurr += values[i-1][remainingCapacity]
 			}
 
-			if maxValWithCurr > maxValWithoutCurr {
-				values[i][j] = maxValWithCurr
-				keep[i][j] = 1
-			} else {
-				values[i][j] = maxValWithoutCurr
-				keep[i][j] = 0
-			}
+			values[i][j] = math.Max(maxValWithCurr, maxValWithoutCurr)
 		}
 	}
 
@@ -95,7 +79,7 @@ func prioritizeTransactions(transactions []Transaction, totalTime int) []Transac
 	c := totalTime
 
 	for n > 0 {
-		if keep[n][c] == 1 {
+		if values[n][c] > values[n-1][c] {
 			results = append(results, transactions[n-1])
 			c -= latencies[transactions[n-1].BankCountryCode]
 		}
